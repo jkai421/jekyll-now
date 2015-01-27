@@ -3,7 +3,7 @@
 #
 
 # Name of your site (displayed in the header)
-name: jkai.github.io
+name: jkai421.github.io
 
 # Short bio or description (displayed in the header)
 description: 悟以往之不谏，知来者之可追
@@ -21,7 +21,7 @@ footer-links:
   email: 
   facebook: 
   flickr: 
-  github: jkai421/jkai421.github.io/jkai.github.io
+  github: jkai421/jkai421.github.io
   rss: # just type anything here for a working RSS icon, make sure you set the "url" above!
   stackoverflow: # your stackoverflow profile, e.g. "users/50476/bart-kiers"
 
