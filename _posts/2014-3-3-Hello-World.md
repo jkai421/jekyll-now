@@ -1,10 +1,89 @@
 ---
 layout: post
-title: You're up and running!
+title:  Cocos2d-x的内存管理机制
 ---
+由于自己一直都是用lua语言在cocos2d-x上工作。这一方面提升了工作的效率，但不好的一点是对于直接从lua上手cocos2d-x的人来说，这屏蔽了许多引擎工作的细节。这其中，cocos2d-x的内存管理机制就是很重要的一块。完整地理解和正确地使用cocos2d-x的内存管理机制是学好cocos2d-x的基础工作。
 
-Next you can update your site name, avatar and other options using the _config.yml file in the root of your repository (shown below :point_down:).
+## 引用计数
+cocos2d-x的内存管理的基础是引用计数。cocos2d-x中的所有对象几乎都继承自Ref基类，Ref基类主要用于引用计数管理，它实现了retain()和release()方法来增加和减少对象的引用计数，如果引用计数为零，执行delete将内存释放。如此，在cocos2d-x中需要解决的问题就变成了如何自动调用retain()和release()方法了。
 
-![_config.yml]({{ site.baseurl }}/images/config.png)
+##autorelease
+cocos2d-x通过对一个对象指针执行autorelease()方法将其加入到一个AutoreleasePool中，并在游戏的每一帧结束时，对AutoreleasePool中的对象执行release()方法。
+1. **这种方法可以称作autorelease方法管理内存**
 
-The easiest way to make your first post is to edit this one. Go into /_posts/ and update the Hello World markdown file. For more instructions head over to the [Jekyll Now repository](https://github.com/barryclark/jekyll-now) on GitHub.
+2. _autorelease()类似于创建了一个共享的智能指针_，作用域为一帧，在该帧结束后，将释放自己的引用计数。
+
+3. 所以，autorelease方式管理内存，变量本身没有自主控制权，而是统一由autoreleasePool进行管理的，是一种弱引用关系。
+
+4. 这种方式适合用于UI元素内存管理。
+
+##RefPtr智能指针
+1. RefPtr<T>在对象的构造函数中分配内存，在对象的析构函数中释放内存。
+
+2. RefPtr<T>的构造函数（包括复制构造函数）会对任何不是nullptr的Ref指针增加引用计数。
+
+3. 适用于单个的非集合元素，比如游戏种的数据。
+
+##UI元素的内存管理
+cocos2d-x的所有UI元素都实现了create()静态方法来返回一个autorelease对象。创建一个Node对象时，其引用计数为1，并加入当前AutoreleasePool，当前帧结束时会调用release()释放一次。如果将Node加入UI树中，Node会被插入Vector<T>中，Vector<T>会对插入的元素执行retian()方法，并在移除元素时执行release()方法，这样在一帧结束时Node的引用计数仍为1，将不会被释放，而Node被移出UI树时，将会被释放。
+
+    Node * Node::create(void)
+    {
+        Node * ret = new Node();
+        if(ret && ret->init()){
+            ret->autorelease();
+        }
+        else{
+            CC_SAFE_DELETE(ret);
+        }
+        return ret;
+    }
+
+----------------
+#UI树
+Cocos2d-x支持在屏幕上绘制精灵、文本、形状、粒子、地图等，所有这些元素都继承自Node类。Node类定义了一个元素的布局、变换、坐标系统等属性。Cocos2d-x中采用二叉树来组织管理一个场景中的所有UI元素，称为UI树。UI树的根节点为Scene类，其每一个节点都是一个Node实例对象。对UI树进行遍历可以决定元素的被绘制顺序和模型视图变换矩阵的计算。Cocos2d-x使用localZOrder来表示元素的逻辑深度，UI树采用中序遍历。一个元素的逻辑深度是一个局部概念，只在其父节点和兄弟节点之间有意义。
+
+##Cocos2d-x整体框架
+###游戏生命周期
+###场景管理
+一个场景是一个以Scene为根节点的UI树。每个时刻最多只有一个当前场景在运行，Director管理当前运行的场景，并提供在不同场景间切换的方法。
+Director提供了两种方法从一个场景切换到另一个场景。一种是使用replaceScene()方法直接替换，这会删除并释放之前的场景；另一种则通过pushScene和popScene方法进行，这种方法不会删除之前的场景。
+
+###游戏循环
+每一帧循环的执行动作：用户输入，动画计算，物理模拟，游戏逻辑更新，UI遍历，绘制，交换缓冲区，自动释放。
+#Cocos2d-x3.0的绘制系统
+
+cocos2d-x3.0的绘制系统实现了元素与绘制逻辑的分离。我们知道，由于每一个UI元素都是Node类的实例对象，都实现了一个draw()方法，而实际中draw()方法仅仅向render发送RenderCommand绘制命令。这个动作不会执行任何的GL绘制，而是将RenderCommand放入一个RenderQueue栈中。等到所有UI元素遍历结束后，render首先对绘制命令进行排序，排序的主要依据是globalZOrder，最后才开始执行绘制命令。
+因此，绘制流程可以划分为3个阶段，分别是：
+
+1. 生成绘制命令RenderCommand
+
+2. 对绘制命令进行排序
+
+3. 执行绘制命令
+
+对于一般的RenderCommand，按照顺序执行绘制。对于相邻且使用相同纹理和着色器的QuadCommand的精灵元素，render会将他们组合在一起，这样可以之调用一次绘制命令，从而减少OpenGL ES的绘制次数，提高性能。
+
+----------------------------------------------------------------------------------------------------------------
+#纹理缓存管理
+
+纹理占据着游戏的大部分内存，对于纹理对内存的占用的管理直接影响游戏的性能。一方面，可以通过选择适当的图片格式或者使用压缩纹理来减少队里对内存的占用。另一方面，需要对纹理的生命周期进行管理，以便于在使用时能够实时调用，而在用完后可以及时销毁。
+
+1. 一个纹理在使用期间应该只创建一次
+
+2. 尽量避免动态加载纹理
+
+##TextureCache
+TextureCache是一个单例模式，对于每个Director只有一个实例。负责Cocos2d-x中纹理的创建、缓存和删除。在Cocos2d-x中，一个纹理对应一个Texture2D实例，创建一个Texture2D实例会将相应的数据加载到GPU内存中，而销毁Texture2D实例时则会将纹理数据从GPU内存中移除，这就构成了一个纹理的生命周期。
+
+TextureCache使用引用计数管理其中的纹理，也就是Texture2D对象。所有的空闲纹理的引用计数都是1，而正在被使用的纹理的引用计数则等于使用它的元素个数加1。TextureCache开放了removeUnusedTextures()方法移除空闲纹理，removeTexture(Texture2D * texures)方法移除指定纹理，以及removeAllTextures()方法移除全部纹理。
+
+TextureCache提供了对纹理的引用计数管理方案，但是在实际游戏中，不同场景间通常会有一些共用的纹理数据。在场景切换时，一方面，我们需要尽量移除不再使用的纹理以节约内存空间，另一方面，需要在进入场景时预加载所有需要的资源。如果只按照引用计数区分资源，会在移除空闲纹理时移除那些新场景中预加载但还未使用的纹理。为了解决这个问题Cocos2d-x维护了一张不同场景各自使用那些资源（包括纹理资源）的表格，从而在进入场景前将对应的资源的引用计数加1，而在离开场景时将对应资源的引用计数减1。
+
+
+--------------
+# 事件分发
+
+**事件**是指在应用程序中由于用户输入或者程序内部的某个处理逻辑完成，需要等待其它模块针对该行为进行一些响应操作的情况，例如玩家单击了屏幕，某个角色血量低于0时触发死亡。Cocos2d-x的事件分发系统是使用订阅者设计模式实现的。
+
+cocos2d-x的**订阅者**对应一个EventListener子类，如果事件处理程序想要响应某个事件，会创建一个对应的EventListener子类的实例。每个EventListener由一个回调函数，一个订阅者类型type，以及一个listerID组成。
