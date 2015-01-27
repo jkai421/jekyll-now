@@ -21,9 +21,8 @@ footer-links:
   email: 
   facebook: 
   flickr: 
-  github: jkai421/jkai.github.io
+  github: jkai421/jkai421.github.io/jkai.github.io
   rss: # just type anything here for a working RSS icon, make sure you set the "url" above!
-  twitter: jekyllrb
   stackoverflow: # your stackoverflow profile, e.g. "users/50476/bart-kiers"
 
 # Your disqus shortname, entering this will enable commenting on posts
