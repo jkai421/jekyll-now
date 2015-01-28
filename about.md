@@ -4,12 +4,8 @@ title: About
 permalink: /about/
 ---
 
-Some information about you!
+这篇博客主要是用于记录自己在游戏引擎的学习过程中的收获。
 
-### More Information
+### 联系我
 
-A place to include any other types of information that you'd like to include about yourself. 
-
-### Contact me
-
-[email@domain.com](mailto:email@domain.com)
+[jkai421@126.com](mailto:email@domain.com)
