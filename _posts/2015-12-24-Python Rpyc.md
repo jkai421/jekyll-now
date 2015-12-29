@@ -40,7 +40,7 @@ RPyC默认不允许对远程对象使用getattr方法，另外，安全方面主
 
 ###并行运行
 在CPython中，由于GIL的存在，多个线程不能同时执行字节码，这简化了python解释器的设计，但是
-却使得CPython不能利用多核CPU。要达到可扩展的唯一方法是多进程。进程可以避免县城的同步难题，
+却使得CPython不能利用多核CPU。要达到可扩展的唯一方法是多进程。进程可以避免线程的同步难题，
 但是进程间通信却十分麻烦。
 
 使用RPyC让多进程变得容易，把RPyC连接的所有进程看做一个“大进程”。
@@ -54,3 +54,48 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
 * 能处理负载均衡和节点错误
 * 能够收集所有节点的计算结果
 * 根据运行时分析结果迁移对象和代码
+
+
+##教程
+
+###一、 经典RPyC介绍
+
+这一则教程是针对经典的PPyC进行的，也就是RpyC 2.60。RPyC 3是重新设计的一个库，有一些重要的修改。但是如果你熟悉了RpyC 2.60，那么对于RpyC 3也同样不会有任何问题。
+
+*运行一个服务器*
+
+我们先从基本的开始：运行一个服务器。本教程中，我们将服务器和客户端运行在同一台机器上。在Windows上双击文件就可以完成。
+
+![启动服务器](/images/running-classic-server.png)
+
+第一行显示了服务器运行的参数：SLAVE 表示SlaveService，tid是线程的ID，0.0.0.0:18812是服务器绑定的PI和端口，0.0.0.0表示全网监听。
+
+*运行一个客户端*
+
+接下来是运行一个客户端来沟通服务器，十分简单。
+
+    import rpyc
+    conn = rpyc.classic.connect("localhost")
+
+> *注意*
+你需要在实际使用时将localhost改为你的RPyC主机IP。如果服务器不是运行在默认端口18812上，还需要显示指定端口号port。
+
+*modules命名空间*
+
+连接上服务器后，我们需要控制它。连接对象conn的modules属性将服务器端的模块空间暴露给客户端。
+
+    # dot notation
+    mod1 = conn.modules.sys # access the sys module on the server
+
+    # bracket notation
+    mod2 = conn.modules["xml.dom.minidom"] # access the xml.dom.minidom module on the server
+
+> *注意*
+有两种方式能够访问到远程模块，使用‘.’方式比较直观但是只能对顶层模块使用，比较有局限性。使用方括号方式可以访问更多层次的模块。
+
+
+![client](../_images/running-classic-client.png)
+一个简单的客户端
+
+截图的第一部分打印当前目录，并没有什么特别的。但是第二部分打出的则是服务器的当前目录了，就是这么简单。
+
