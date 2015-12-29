@@ -48,7 +48,8 @@ RPyC默认不允许对远程对象使用getattr方法，另外，安全方面主
 
 ###分布式计算平台
 
-RPyC为分布式计算和集群提供了很好的基础，它是与体系结构和平台无关的，支持同步和异步触发。客户端和服务端是对等的关系。在这些特点的基础上，可以很容易构建一个具有如下特点的分布式计算框架：
+RPyC为分布式计算和集群提供了很好的基础，它是与体系结构和平台无关的，支持同步和异步触发。
+客户端和服务端是对等的关系。在这些特点的基础上，可以很容易构建一个具有如下特点的分布式计算框架：
 
 * 能够处理节点的加入集群和离开集群
 * 能处理负载均衡和节点错误
@@ -60,17 +61,20 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
 
 ###一、 经典RPyC介绍
 
-这一则教程是针对经典的PPyC进行的，也就是RpyC 2.60。RPyC 3是重新设计的一个库，有一些重要的修改。但是如果你熟悉了RpyC 2.60，那么对于RpyC 3也同样不会有任何问题。
+这一则教程是针对经典的PPyC进行的，也就是RpyC 2.60。RPyC 3是重新设计的一个库，有一些重要的修改。
+但是如果你熟悉了RpyC 2.60，那么对于RpyC 3也同样不会有任何问题。
 
-*运行一个服务器*
+**运行一个服务器**
 
-我们先从基本的开始：运行一个服务器。本教程中，我们将服务器和客户端运行在同一台机器上。在Windows上双击文件就可以完成。
+我们先从基本的开始：运行一个服务器。本教程中，我们将服务器和客户端运行在同一台机器上。
+在Windows上双击文件就可以完成。
 
 ![启动服务器](/images/running-classic-server.png)
 
-第一行显示了服务器运行的参数：SLAVE 表示SlaveService，tid是线程的ID，0.0.0.0:18812是服务器绑定的PI和端口，0.0.0.0表示全网监听。
+第一行显示了服务器运行的参数：SLAVE 表示SlaveService，tid是线程的ID，0.0.0.0:18812是服务器
+绑定的PI和端口，0.0.0.0表示全网监听。
 
-*运行一个客户端*
+**运行一个客户端**
 
 接下来是运行一个客户端来沟通服务器，十分简单。
 
@@ -78,9 +82,10 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
     conn = rpyc.classic.connect("localhost")
 
 > *注意*
-你需要在实际使用时将localhost改为你的RPyC主机IP。如果服务器不是运行在默认端口18812上，还需要显示指定端口号port。
+你需要在实际使用时将localhost改为你的RPyC主机IP。如果服务器不是运行在默认端口18812上，
+还需要显示指定端口号port。
 
-*modules命名空间*
+**modules命名空间**
 
 连接上服务器后，我们需要控制它。连接对象conn的modules属性将服务器端的模块空间暴露给客户端。
 
@@ -91,7 +96,8 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
     mod2 = conn.modules["xml.dom.minidom"] # access the xml.dom.minidom module on the server
 
 > *注意*
-有两种方式能够访问到远程模块，使用‘.’方式比较直观但是只能对顶层模块使用，比较有局限性。使用方括号方式可以访问更多层次的模块。
+有两种方式能够访问到远程模块，使用‘.’方式比较直观但是只能对顶层模块使用，比较有局限性。
+使用方括号方式可以访问更多层次的模块。
 
 
 ![client](/images/running-classic-client.png)
@@ -99,3 +105,180 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
 
 截图的第一部分打印当前目录，并没有什么特别的。但是第二部分打出的则是服务器的当前目录了，就是这么简单。
 
+
+
+
+###五、异步操作和事件
+
+**异步**
+
+The last part of the tutorial deals with a more “advanced” issue of RPC programming, asynchronous operation, which is a key feature of RPyC. The code you’ve seen so far was synchronous – which is probably very similar to the code you normally write: when you invoke a function, you block until the result arrives. Asynchronous invocation, on the other hand, allows you to start the request and continue, rather than waiting. Instead of getting the result of the call, you get a special object known as an AsyncResult (also known as a “future” or “promise”]), that will eventually hold the result.
+
+In order to turn the invocation of a remote function (or any callable object) asynchronous, all you have to do is wrap it with async, which creates a wrapper function that will return an AsyncResult instead of blocking. AsyncResult objects have several properties and methods that
+
+ready - indicates whether or not the result arrived
+error - indicates whether the result is a value or an exception
+expired - indicates whether the AsyncResult object is expired (its time-to-wait has elapsed before the result has arrived). Unless set by set_expiry, the object will never expire
+value - the value contained in the AsyncResult. If the value has not yet arrived, accessing this property will block. If the result is an exception, accessing this property will raise it. If the object has expired, an exception will be raised. Otherwise, the value is returned
+wait() - wait for the result to arrive, or until the object is expired
+add_callback(func) - adds a callback to be invoked when the value arrives
+set_expiry(seconds) - sets the expiry time of the AsyncResult. By default, no expiry time is set
+This may sound a bit complicated, so let’s have a look at some real-life code, to convince you it’s really not that scary:
+
+    >>> import rpyc
+    >>> c=rpyc.classic.connect("localhost")
+    >>> c.modules.time.sleep
+    <built-in function sleep>
+    >>> c.modules.time.sleep(2) # i block for two seconds, until the call returns
+
+     # wrap the remote function with async(), which turns the invocation asynchronous
+    >>> asleep = rpyc.async(c.modules.time.sleep)
+    >>> asleep
+    async(<built-in function sleep>)
+
+    # invoking async functions yields an AsyncResult rather than a value
+    >>> res = asleep(15)
+    >>> res
+    <AsyncResult object (pending) at 0x0842c6bc>
+    >>> res.ready
+    False
+    >>> res.ready
+    False
+
+    # ... after 15 seconds...
+    >>> res.ready
+    True
+    >>> print res.value
+    None
+    >>> res
+    <AsyncResult object (ready) at 0x0842c6bc>
+
+And here’s a more interesting snippet:
+
+    >>> aint = rpyc.async(c.modules.__builtin__.int)  # async wrapper for the remote type int
+
+    # a valid call
+    >>> x = aint("8")
+    >>> x
+    <AsyncResult object (pending) at 0x0844992c>
+    >>> x.ready
+    True
+    >>> x.error
+    False
+    >>> x.value
+    8
+
+    # and now with an exception
+    >>> x = aint("this is not a valid number")
+    >>> x
+    <AsyncResult object (pending) at 0x0847cb0c>
+    >>> x.ready
+    True
+    >>> x.error
+    True
+    >>> x.value #
+    Traceback (most recent call last):
+    ...
+      File "/home/tomer/workspace/rpyc/core/async.py", line 102, in value
+        raise self._obj
+    ValueError: invalid literal for int() with base 10: 'this is not a valid number'
+    >>>
+
+**事件**
+
+异步和回调的组合则产生了一个有趣的结果：异步回调，也叫作事件。事件是由“事件生产者”发出，
+将相关变化通知“事件消费者”，这个过程通常是单向的。在RPC中，事件通过异步回调实现，返回值
+被忽略。看下面一个文件监控器的例子，这个监控器使用os.stat()监控一个文件的变化，并在变化
+发生时通知客户端。
+
+    import rpyc
+    import os
+    import time
+    from threading import Thread
+
+    class FileMonitorService(rpyc.SlaveService):
+        class exposed_FileMonitor(object):   # exposing names is not limited to methods :)
+            def __init__(self, filename, callback, interval = 1):
+                self.filename = filename
+                self.interval = interval
+                self.last_stat = None
+                self.callback = rpyc.async(callback)   # create an async callback
+                self.active = True
+                self.thread = Thread(target = self.work)
+                self.thread.start()
+            def exposed_stop(self):   # this method has to be exposed too
+                self.active = False
+                self.thread.join()
+            def work(self):
+                while self.active:
+                    stat = os.stat(self.filename)
+                    if self.last_stat is not None and self.last_stat != stat:
+                        self.callback(self.last_stat, stat)   # notify the client of the change
+                    self.last_stat = stat
+                    time.sleep(self.interval)
+
+    if __name__ == "__main__":
+        from rpyc.utils.server import ThreadedServer
+        ThreadedServer(FileMonitorService, port = 18871).start()
+下面是一个事件的演示:
+
+    >>> import rpyc
+    >>>
+    >>> f = open("/tmp/floop.bloop", "w")
+    >>> conn = rpyc.connect("localhost", 18871)
+    >>> bgsrv = rpyc.BgServingThread(conn)  # creates a bg thread to process incoming events
+    >>>
+    >>> def on_file_changed(oldstat, newstat):
+    ...     print "file changed"
+    ...     print "    old stat: %s" % (oldstat,)
+    ...     print "    new stat: %s" % (newstat,)
+    ...
+    >>> mon = conn.root.FileMonitor("/tmp/floop.bloop", on_file_changed) # create a filemon
+
+    # wait a little for the filemon to have a look at the original file
+
+    >>> f.write("shmoop") # change size
+    >>> f.flush()
+
+    # the other thread then prints
+    file changed
+        old stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 0L, 1225204483, 1225204483, 1225204483)
+        new stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 6L, 1225204483, 1225204556, 1225204556)
+
+    >>>
+    >>> f.write("groop") # change size
+    >>> f.flush()
+    file changed
+        old stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 6L, 1225204483, 1225204556, 1225204556)
+        new stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 11L, 1225204483, 1225204566, 1225204566)
+
+    >>> f.close()
+    >>> f = open(filename, "w")
+    file changed
+        old stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 11L, 1225204483, 1225204566, 1225204566)
+        new stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 0L, 1225204483, 1225204583, 1225204583)
+
+    >>> mon.stop()
+    >>> bgsrv.stop()
+    >>> conn.close()
+
+在这个实例中采用的是BgServingThread，启动一个后台线程来服务所有请求，而主线程就可以空闲出来完成自己的事情。
+
+    >>> f = open("/tmp/floop.bloop", "w")
+    >>> conn = rpyc.connect("localhost", 18871)
+    >>> mon = conn.root.FileMonitor("/tmp/floop.bloop", on_file_changed)
+    >>>
+
+    # change the size...
+    >>> f.write("shmoop")
+    >>> f.flush()
+
+    # ... seconds pass but nothing is printed ...
+    # until we make some interaction with the connection: printing a remote object invokes
+    # the remote __str__ of the object, so that all pending requests are suddenly processed
+    >>> print mon
+    file changed
+        old stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 0L, 1225205197, 1225205197, 1225205197)
+        new stat: (33188, 1564681L, 2051L, 1, 1011, 1011, 6L, 1225205197, 1225205218, 1225205218)
+    <__main__.exposed_FileMonitor object at 0xb7a7a52c>
+    >>>
