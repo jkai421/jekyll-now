@@ -111,19 +111,24 @@ RPyC为分布式计算和集群提供了很好的基础，它是与体系结构�
 ###五、异步操作和事件
 
 **异步**
+教程的最后一部分来看看关于RPC的更高端的问题，异步操作。到目前为止，你所看到的代码都是同步操作，
+同步操作与正常编程的思维方式相似，调用一个函数，然后阻塞等待其执行完毕。而异步触发则不必阻塞等待
+运行结果，而是发出请求之后继续运行。所以异步触发得到的不是一次调用返回的结果。而是一个特殊的对象，
+成为异步对象，用于存放最终结果。
 
-The last part of the tutorial deals with a more “advanced” issue of RPC programming, asynchronous operation, which is a key feature of RPyC. The code you’ve seen so far was synchronous – which is probably very similar to the code you normally write: when you invoke a function, you block until the result arrives. Asynchronous invocation, on the other hand, allows you to start the request and continue, rather than waiting. Instead of getting the result of the call, you get a special object known as an AsyncResult (also known as a “future” or “promise”]), that will eventually hold the result.
+为了以异步方式触发远程函数，需要以async对函数进行包装，async会创建一个外观方法返回异步结果。
+异步结果包含一些属性和方法：
 
-In order to turn the invocation of a remote function (or any callable object) asynchronous, all you have to do is wrap it with async, which creates a wrapper function that will return an AsyncResult instead of blocking. AsyncResult objects have several properties and methods that
+* ready - 指示结果是否到达
+* error - 指示结果是值还是异常
+* expired - 指示结果是否已经超时。 如果没有set_expiry，对象不会超时。
+* value - 异步结果的值。如果结果未就绪，访问该属性会阻塞；如果结果为异常，访问该属性会抛出改异常；
+如果结果为超时，访问该属性会抛出异常；否则，返回正常结果。
+* wait() - 等待结果到达，或者对象超时。
+* add_callback(func) - 增加一个在结果到达时触发的回调。
+* set_expiry(seconds) - 为异步对象设置一个超时时间。
 
-ready - indicates whether or not the result arrived
-error - indicates whether the result is a value or an exception
-expired - indicates whether the AsyncResult object is expired (its time-to-wait has elapsed before the result has arrived). Unless set by set_expiry, the object will never expire
-value - the value contained in the AsyncResult. If the value has not yet arrived, accessing this property will block. If the result is an exception, accessing this property will raise it. If the object has expired, an exception will be raised. Otherwise, the value is returned
-wait() - wait for the result to arrive, or until the object is expired
-add_callback(func) - adds a callback to be invoked when the value arrives
-set_expiry(seconds) - sets the expiry time of the AsyncResult. By default, no expiry time is set
-This may sound a bit complicated, so let’s have a look at some real-life code, to convince you it’s really not that scary:
+下面看一个简单的例子。
 
     >>> import rpyc
     >>> c=rpyc.classic.connect("localhost")
@@ -153,7 +158,7 @@ This may sound a bit complicated, so let’s have a look at some real-life code,
     >>> res
     <AsyncResult object (ready) at 0x0842c6bc>
 
-And here’s a more interesting snippet:
+一个更有意思的例子:
 
     >>> aint = rpyc.async(c.modules.__builtin__.int)  # async wrapper for the remote type int
 
